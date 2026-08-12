@@ -7,7 +7,7 @@
  */
 import { nanoid } from "nanoid";
 import { Type } from "typebox";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ghLogger } from "./log.ts";
 import { armRoutine, stopRoutine } from "./poller.ts";
 import { saveStore } from "./store.ts";
@@ -341,7 +341,10 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 				}),
 			),
 		}),
-		async execute(_toolCallId: string, params: { query?: string }) {
+		async execute(
+			_toolCallId: string,
+			params: { query?: string },
+		): Promise<AgentToolResult<Record<string, unknown>>> {
 			const db = getDb();
 			if (!db)
 				return {
