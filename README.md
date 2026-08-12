@@ -1,49 +1,52 @@
-# pi-routines patches (HnskNoah/pi-claw bot setup)
+# pi-routines fork (HnskNoah/pi-claw bot setup)
 
-Patched copy of `@davecodes/pi-routines` v0.5.1 — installed at
-`~/.pi/agent/npm/node_modules/@davecodes/pi-routines/`. The live install is in
-node_modules and is **lost on extension reinstall/upgrade**; this directory is
-the durable home for the patches.
+Full fork of `@davecodes/pi-routines` v0.5.1 — **all source lives in this
+repo**. The running copy is installed at
+`~/.pi/agent/npm/node_modules/@davecodes/pi-routines/` (lost on extension
+reinstall/upgrade); `deploy.ts` is the only entry point that syncs this repo
+into the install.
 
-## Apply after reinstall/upgrade
+Owned by the pi-claw GitHub bot setup. Upstream: `Davidcreador/pi-routines`.
 
-```powershell
-node C:\Users\Latitude\Dev\pi-agent\pi-routines-patches\apply.js
-# then /reload pi
+## Workflow (user convention)
+
+```
+edit fork source → node deploy.ts → npx tsc --noEmit (in install dir) → done
 ```
 
-Optional: `cd` into the pi-routines package and run `npx tsc --noEmit` to
-verify the copy is clean.
+The fork has no node_modules; run type-checking inside the installed copy.
+`node deploy.ts` runs on Node ≥22 native type stripping (no tsx, no cjs shim).
 
-## What was changed (vs 0.5.1)
+## Deploy
 
-| File | Change |
+```powershell
+node deploy.ts          # sync src/ + extensions/ + configs, restore missing deps
+node deploy.ts --check  # diff-only report
+```
+
+Always re-run `deploy.ts` after the extension is reinstalled/upgraded
+(the script also warns when the installed version ≠ fork baseline v0.5.1).
+
+## Divergence from upstream (what we changed)
+
+| Area | Change |
 |---|---|
-| `src/types.ts` | Event enum + `GithubEventUnion` + schema: added `issues.closed`, `issues.events`, `discussion`, `issue.comment`, `discussion.comment` (9 total). `MIN_GITHUB_POLL_MS` 60s → **10s** (user requirement). |
-| `src/parser.ts` | `MIN_MS` 30_000 → **10_000** (10s poll floor). |
-| `src/github-poller.ts` | `endpointFor`: issue.comment → `issues/comments?sort=created&direction=desc`, discussion.comment → `discussions/comments?...`; discussion event id = `number:updated_at`; issues.events id = own `id`. `normaliseEvents`: comment events skip `[bot]` authors (prevents self-loop); payload trimmed to essentials + a chat-style `message` line for every event type. **401 auto-refresh**: on unauthorized `gh` response, runs `refresh-bot-token.js` (path from `$PI_GH_REFRESH_SCRIPT` or `~/Dev/pi-agent/refresh-bot-token.js`) and retries once before backing off. |
-| `src/github-poller.ts` (message bridge) | **Refactor**: github path no longer uses the routine fire queue / guard / tick bookkeeping. Fresh events → `buildPrompt` + `pi.sendUserMessage({deliverAs:"followUp"})` directly (pi's unbounded `_followUpMessages` FIFO = the queue: zero loss, one turn per message, TUI-like). Paused gate checked locally; `githubEvents` map removed from `types.ts`/`executor.ts`/`scheduler.ts` (dead after refactor). Cursor is the only persisted state; pino covers observability. |
-| `src/executor.ts` | `buildPrompt`: `{githubEvent}` injects the chat-style `message` text when present (fallback: JSON); new alias placeholder `{githubMessage}`. Fire events logged via pino. |
-| `src/pi-log.ts` | **new file**: shared pino logger → JSON Lines to `~/.pi/agent/logs/pi-claw.log` (`$PI_GH_LOG` to override, `$PI_GH_LOG_LEVEL` e.g. debug). Mature logging swap for the earlier text hack (user: "日志是一个很成熟的领域了"). |
-| `package.json` | added dependency `pino` (apply.js restores it after reinstall). |
-| `src/store.ts` | Persisted schema/union updates for the new events; store validation accepts them. |
-| `src/tools/routine-create.ts` | Trigger creation accepts the new events. |
-| `src/tools/_mutate.ts` | Mutation validation union updated for new events. |
+| `src/types.ts` | Poll `MIN_GITHUB_POLL_MS` = 10s; 9 github events (added issues.closed, issues.events, issue.comment, discussion, discussion.comment); `githubEvents` map removed (dead after message-bridge refactor). |
+| `src/parser.ts` | `MIN_MS` 10s for human github intervals. |
+| `src/github-poller.ts` | **Message bridge**: fresh events → `buildPrompt` + `pi.sendUserMessage({deliverAs:"followUp"})` (pi's unbounded `_followUpMessages` FIFO — zero loss, one turn per message, TUI-like). No fire-queue/guard/tick coupling; paused gate checked locally. Chat-style `message` field + trimmed payload per event; `[bot]` authors skipped; discussion id = `number:updated_at`; cursor-missing path compares embedded timestamps (discussion fires never happened without this); 401 auto-refresh via `refresh-bot-token.js`; pino log lines (poll/fire/paused/inject failed). |
+| `src/executor.ts` | `{githubEvent}`/`{githubMessage}` injection of the chat `message` text; pino fire log; `githubEvents` map fallback removed. |
+| `src/pi-log.ts` | **New**: pino JSON-Lines logger → `~/.pi/agent/logs/pi-claw.log` (`$PI_GH_LOG` path override, `$PI_GH_LOG_LEVEL` level). |
+| `src/scheduler.ts` / `src/hooks.ts` / `src/tools/_mutate.ts` | Small: 10s parsing, removed `githubEvents` map references. |
+| `src/tools/routine-create.ts` | Event enum unions for the 4 patched events. |
+| `package.json` | Added `pino ^10.3.1` dependency (deploy.ts restores it). |
 
-## Runtime dependencies (not in this dir)
+Notes: `// patched by pi:` comments inside source mark the changeset for
+upstream diffing — they are our code now, kept as provenance markers.
 
-- `C:\Users\Latitude\Dev\pi-agent\refresh-bot-token.js` — JWT → installation
-  token → `gh auth login --with-token` (1h expiry; poller auto-refreshes on 401).
-- GitHub App `hanenoah-bot` (App ID 4563716, installation 153042714), private
-  key in `~/.pi/agent/gh-app/`, config `{"appId": 4563716}`.
+## GitHub API quirks (this App token)
 
-## Notes / known quirks
-
-- REST discussions endpoints return **404** for this App's token (read works,
-  write doesn't); discussion replies must go through GraphQL
-  (`addDiscussionComment`). The `github-discussion-chat` routine prompt embeds
-  the GraphQL command.
-- Comment-event fire payloads are trimmed to `body / user / created_at /
-  issue_number / discussion_number` + `message` (no URLs — user request).
-- Routine prompts live in `~/.pi/agent/extensions/routines/state.json`, not in
-  this package — they don't need re-applying.
+- REST `discussions` list GET → 200; list comments/POST comment → **404**;
+  replies must use GraphQL `addDiscussionComment`.
+- `issue.comment` entries have `issue.number = null` (message shows
+  `#undefined`; resolve from `html_url` when needed).
+- 10s polling ≈ 840 req/h (~17% of the 5000/h per-install quota).
