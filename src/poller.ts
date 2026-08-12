@@ -437,7 +437,9 @@ export function buildPrompt(
 		.replaceAll("{githubEvent}", msg)
 		.replaceAll("{githubMessage}", msg);
 
-	const header = `[↺ routine: ${routine.name} · tick ${nextTick} · ${hhmm}]\nPrevious state: ${userStateJson}\n\n`;
+	// 消息注入同会话, 上下文由 pi 管理(历史+compaction)——不再注入 Previous state 段。
+	// userState 计算保留(向后兼容 {state} 占位符), 但 header 不含。
+	const header = `[↺ routine: ${routine.name} · tick ${nextTick} · ${hhmm}]\n\n`;
 	const truncNote = truncated ? "\n\n[state truncated]" : "";
 	const quietFooter = routine.quiet
 		? "\n\n---\n" +
