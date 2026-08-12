@@ -1,31 +1,28 @@
 # pi-routines fork (HnskNoah/pi-claw bot setup)
 
 Full fork of `@davecodes/pi-routines` v0.5.1 — **all source lives in this
-repo**. The running copy is installed at
-`~/.pi/agent/npm/node_modules/@davecodes/pi-routines/` (lost on extension
-reinstall/upgrade); `deploy.ts` is the only entry point that syncs this repo
-into the install.
+repo, and pi loads it directly from here** (auto-discovered at
+`~/.pi/agent/extensions/`, hot-reloaded via `/reload`). The npm package is
+**not installed** — no double copy, no deploy step.
 
 Owned by the pi-claw GitHub bot setup. Upstream: `Davidcreador/pi-routines`.
 
 ## Workflow (user convention)
 
 ```
-edit fork source → node deploy.ts → npx tsc --noEmit (in install dir) → done
+edit source here → /reload pi → done
 ```
 
-The fork has no node_modules; run type-checking inside the installed copy.
-`node deploy.ts` runs on Node ≥22 native type stripping (no tsx, no cjs shim).
+`npm run typecheck` validates (local `typescript` devDep). Changes are
+pushed to `HnskNoah/pi-claw-bot-routines` as usual.
 
-## Deploy
+## How pi loads it
 
-```powershell
-node deploy.ts          # sync src/ + extensions/ + configs, restore missing deps
-node deploy.ts --check  # diff-only report
-```
-
-Always re-run `deploy.ts` after the extension is reinstalled/upgraded
-(the script also warns when the installed version ≠ fork baseline v0.5.1).
+`package.json` `pi.extensions: ["./extensions/index.ts"]` — auto-discovered
+from `~/.pi/agent/extensions/pi-routines/`. The loader aliases
+`@earendil-works/*` to pi's own built-in entry points, so no peer install is
+needed at runtime. Deps (`nanoid`, `pino`, `typebox`) are installed locally
+in `node_modules/` (gitignored).
 
 ## Divergence from upstream (what we changed)
 

@@ -42,20 +42,10 @@
   "pi": {
     "extensions": [
       "./extensions/index.ts"
-    ],
-    "skills": [
-      "./skills"
     ]
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "test:smoke": "tsx src/parser.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "prepublishOnly": "pnpm check"
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.75.3 <1",
