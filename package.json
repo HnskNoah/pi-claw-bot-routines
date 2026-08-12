@@ -1,6 +1,6 @@
 {
-  "name": "@davecodes/pi-routines",
-  "version": "0.5.1",
+  "name": "pi-claw-bot-routines",
+  "version": "1.0.0",
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -15,7 +15,7 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "description": "Pi extension for scheduled and event-driven routines",
+  "description": "pi-claw GitHub bot runtime — self-built polling message bridge (fork of @davecodes/pi-routines concepts, fully rewritten)",
   "keywords": [
     "pi",
     "pi-package",
@@ -57,9 +57,7 @@
     "typebox": "^1.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
-    "@types/node": "^22.0.0",
-    "tsx": "^4.22.3",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
   }
 }

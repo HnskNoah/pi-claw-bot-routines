@@ -1,49 +1,60 @@
-# pi-routines fork (HnskNoah/pi-claw bot setup)
+# pi-claw bot runtime
 
-Full fork of `@davecodes/pi-routines` v0.5.1 — **all source lives in this
-repo, and pi loads it directly from here** (auto-discovered at
-`~/.pi/agent/extensions/`, hot-reloaded via `/reload`). The npm package is
-**not installed** — no double copy, no deploy step.
+pi 的 GitHub bot 运行时(自研重构版)。基于 pi-routines 的 fork,但**全部源码已
+重写为这个 bot 场景需要的极简实现** —— 36 个上游文件 → 7 个文件,每一行都是
+自己的代码。
 
-Owned by the pi-claw GitHub bot setup. Upstream: `Davidcreador/pi-routines`.
+GitHub 消息桥:轮询 `gh api` → 新事件 → 聊天式消息直插 pi 消息队列
+(`sendUserMessage(followUp)`),一消息一轮,与 TUI 消息完全同构。
+无 webhook、无隧道、无 routine fire 记账(队列/守卫/次数上限都无意义)。
 
-## Workflow (user convention)
+## 结构
 
 ```
-edit source here → /reload pi → done
+extensions/index.ts   入口:注册 6 工具 + 生命周期接线
+src/types.ts          精简模型:Routine / GithubTrigger / RoutineStore(schemaVersion 3)
+src/store.ts          state.json 原子读写($HOME/.pi/agent/extensions/routines/state.json)
+src/log.ts            pino JSON Lines → ~/.pi/agent/logs/pi-claw.log($PI_GH_LOG / $PI_GH_LOG_LEVEL)
+src/poller.ts         GitHub 消息桥:endpoint 映射 / 事件规范化 / 游标 / 401 刷新 / 退避
+src/tools.ts          6 个 LLM 工具:RoutineCreate/List/Delete/SetState/Pause/Resume
+src/lifecycle.ts      session_start 载入+arm;session_shutdown 停 timer
 ```
 
-`npm run typecheck` validates (local `typescript` devDep). Changes are
-pushed to `HnskNoah/pi-claw-bot-routines` as usual.
+## 工作流
 
-## How pi loads it
+```
+改源码 → npm run typecheck → /reload → 生效   (push 到 HnskNoah/pi-claw-bot-routines)
+```
 
-`package.json` `pi.extensions: ["./extensions/index.ts"]` — auto-discovered
-from `~/.pi/agent/extensions/pi-routines/`. The loader aliases
-`@earendil-works/*` to pi's own built-in entry points, so no peer install is
-needed at runtime. Deps (`nanoid`, `pino`, `typebox`) are installed locally
-in `node_modules/` (gitignored).
+## 关键机制(都是实战验证过的)
 
-## Divergence from upstream (what we changed)
+- **游标**:一个 trigger 只有 `cursor` 持久化。首轮成功只 seed 不 fire。
+- **discussion 游标 = `number:updated_at`**:新评论 bump updated_at,旧游标必然
+  从页面消失 → 按 ISO 时间戳比较(这是 discussion 从不 fire 的根因修复)。
+- **[bot] 过滤**:评论事件跳过 bot 作者,防自触发环。
+- **401 自动刷新**:installation token 每小时过期,401 → `refresh-bot-token.js`
+  → 重试一次。
+- **退避**:连续失败 2× interval,上限 60s;gh 缺失只记一次日志,不崩。
+- **paused 门**:注入绕过 scheduler 的 paused gate,轮询前自检,跳过 gh 调用不烧配额。
 
-| Area | Change |
-|---|---|
-| `src/types.ts` | Poll `MIN_GITHUB_POLL_MS` = 10s; 9 github events (added issues.closed, issues.events, issue.comment, discussion, discussion.comment); `githubEvents` map removed (dead after message-bridge refactor). |
-| `src/parser.ts` | `MIN_MS` 10s for human github intervals. |
-| `src/github-poller.ts` | **Message bridge**: fresh events → `buildPrompt` + `pi.sendUserMessage({deliverAs:"followUp"})` (pi's unbounded `_followUpMessages` FIFO — zero loss, one turn per message, TUI-like). No fire-queue/guard/tick coupling; paused gate checked locally. Chat-style `message` field + trimmed payload per event; `[bot]` authors skipped; discussion id = `number:updated_at`; cursor-missing path compares embedded timestamps (discussion fires never happened without this); 401 auto-refresh via `refresh-bot-token.js`; pino log lines (poll/fire/paused/inject failed). |
-| `src/executor.ts` | `{githubEvent}`/`{githubMessage}` injection of the chat `message` text; pino fire log; `githubEvents` map fallback removed. |
-| `src/pi-log.ts` | **New**: pino JSON-Lines logger → `~/.pi/agent/logs/pi-claw.log` (`$PI_GH_LOG` path override, `$PI_GH_LOG_LEVEL` level). |
-| `src/scheduler.ts` / `src/hooks.ts` / `src/tools/_mutate.ts` | Small: 10s parsing, removed `githubEvents` map references. |
-| `src/tools/routine-create.ts` | Event enum unions for the 4 patched events. |
-| `package.json` | Added `pino ^10.3.1` dependency (installed locally; gitignored). |
+## 上游差异
 
-Notes: `// patched by pi:` comments inside source mark the changeset for
-upstream diffing — they are our code now, kept as provenance markers.
+- 删除:全部 slash 命令(commands/*)、pulse/cron/oneoff/hook/api 触发、
+  parser/format/guard/suppressor/widget/path-probe/server/tokens/schedule-nl、
+  fire 记账、run 历史、模板、API server。
+- 保留(重写):6 个同名 LLM 工具接口(LLM 提示词兼容)、state.json 格式
+  (schemaVersion 3,数据零迁移)、{githubMessage}/{state} 占位符、quiet/maxTicks/
+  maxRunsPerDay/paused、github filter。
+- 改动:轮询 tier 化(对话 10s / 通知 60s)、`pollIntervalMs` 下限 10s。
 
-## GitHub API quirks (this App token)
+## 部署
 
-- REST `discussions` list GET → 200; list comments/POST comment → **404**;
-  replies must use GraphQL `addDiscussionComment`.
-- `issue.comment` entries have `issue.number = null` (message shows
-  `#undefined`; resolve from `html_url` when needed).
-- 10s polling ≈ 840 req/h (~17% of the 5000/h per-install quota).
+- 位置:`~/.pi/agent/extensions/pi-routines/`(pi 自动发现,`/reload` 热重载)。
+- 直接加载(self-installed),npm 包(github 已删)不安装。
+- 依赖(nanoid / pino / typebox)本地安装,gitignored。
+- 提交身份:`hanenoah-bot <315984458+hanenoah-bot[bot]@users.noreply.github.com>`;
+  推送经代理 `http://127.0.0.1:6478`(git config http.proxy 已设)。
+
+## License
+
+MIT — 上游 `@davecodes/pi-routines` © 2026 David Creador;fork 维护 © 2026 HnskNoah。
