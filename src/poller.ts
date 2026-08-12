@@ -105,6 +105,24 @@ function runGhProcess(args: string[]): Promise<GhResult> {
 
 // ─── installation token 401 刷新 ─────────────────────────────────────────────
 
+/** 频率退化档位: 空闲时 10s → 30s → 60s(相对各自 base interval 的倍数)。 */
+const IDLE_TIERS = [1, 3, 6];
+
+/**
+ * 频率退化决策(纯函数, 可测): 有 fresh 回 base, 无 fresh 升档封顶最高档。
+ * base=10s 时档位为 10s → 30s → 60s。
+ */
+export function nextIdleDelay(
+	freshCount: number,
+	idleLevel: number,
+	interval: number,
+): { delay: number; level: number } {
+	if (freshCount > 0) return { delay: interval, level: 0 };
+	const level = Math.min(idleLevel + 1, IDLE_TIERS.length - 1);
+	return { delay: interval * IDLE_TIERS[level], level };
+}
+
+
 const REFRESH_SCRIPT =
 	process.env.PI_GH_REFRESH_SCRIPT ??
 	(() => {
@@ -398,6 +416,8 @@ export function buildPrompt(
 interface TickerState {
 	backoffMs: number;
 	ghMissingLogged: boolean;
+	/** 频率退化档(0=base,1=3x,2=6x): 连续空转升档, 有 fresh 回 0。 */
+	idleLevel: number;
 }
 
 /** 一个 trigger 的轮询循环。返回下次 tick 的延迟 ms(成功=interval,失败=退避)。 */
@@ -535,6 +555,14 @@ async function tick(
 		}
 	}
 
+	// 频率退化: 全部成功时, 有 fresh(活跃)→ 回 base 档; 连续空转 → 升档(10s→30s→60s)。
+	// 失败路径保留 backoff(2× cap 60s), 不与档位互相干扰。
+	if (failures.length === 0) {
+		const stepped = nextIdleDelay(fresh.length, tstate.idleLevel, interval);
+		tstate.idleLevel = stepped.level;
+		nextDelay = stepped.delay;
+	}
+
 	ghLogger.info(
 		{
 			routine: routine.name,
@@ -567,7 +595,7 @@ function armTrigger(
 		return;
 	}
 	const interval = Math.max(MIN_GITHUB_POLL_MS, trig.pollIntervalMs);
-	const tstate: TickerState = { backoffMs: interval, ghMissingLogged: false };
+	const tstate: TickerState = { backoffMs: interval, ghMissingLogged: false, idleLevel: 0 };
 
 	const schedule = (delay: number): ReturnType<typeof setTimeout> => {
 		const handle = setTimeout(() => {

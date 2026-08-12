@@ -7,7 +7,7 @@
  * type-only,type stripping 后不残留,故可脱离 pi 独立跑。
  */
 import assert from "node:assert/strict";
-import { endpointFor, eventsAfterCursor, normaliseEvents } from "./src/poller.ts";
+import { endpointFor, eventsAfterCursor, nextIdleDelay, normaliseEvents } from "./src/poller.ts";
 import type { GithubTrigger } from "./src/types.ts";
 
 const trig = (event: string, repo = "HnskNoah/pi-claw"): GithubTrigger => ({
@@ -90,4 +90,12 @@ const opened = normaliseEvents(trig("issues.opened"), [
 ]);
 assert.match(opened[0].payload.message as string, /打开了 issue #9「标题」/);
 
-console.log("✓ smoke 全过:endpoint / [bot] 过滤 / discussion 时间戳回退 / seed / 页滚 / 消息化");
+// 6. 频率退化: 10s → 30s → 60s, 有 fresh 立即回 10s
+const base = 10_000;
+assert.deepEqual(nextIdleDelay(0, 0, base), { delay: 30_000, level: 1 }, "空转1次 → 30s");
+assert.deepEqual(nextIdleDelay(0, 1, base), { delay: 60_000, level: 2 }, "空转2次 → 60s");
+assert.deepEqual(nextIdleDelay(0, 2, base), { delay: 60_000, level: 2 }, "封顶 60s");
+assert.deepEqual(nextIdleDelay(1, 2, base), { delay: 10_000, level: 0 }, "有 fresh → 立即回 10s");
+assert.deepEqual(nextIdleDelay(0, 0, 120_000), { delay: 360_000, level: 1 }, "watch(120s) → 360s");
+
+console.log("✓ smoke 全过:endpoint / [bot] 过滤 / discussion 时间戳回退 / seed / 页滚 / 消息化 / 频率退化");
