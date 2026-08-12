@@ -57,7 +57,7 @@ const withBot = normaliseEvents(trig("issue.comment"), [
 	{ id: 10, user: { login: "HnskNoah" }, body: "hello", created_at: "2026-08-12T00:01:00Z" },
 ]);
 assert.equal(withBot.length, 1, "[bot] 作者被跳过");
-assert.equal(withBot[0].payload.message, "HnskNoah 在 issue #undefined 说: hello");
+assert.equal(withBot[0].payload.message, "[github] HnskNoah 在 issue #undefined 说: hello", "无 issue 号回退 [github]");
 
 // 2b. issue.number=null quirk:从 html_url 解析真实 issue 号(曾导致回错帖)
 const withUrl = normaliseEvents(trig("issue.comment"), [
@@ -69,7 +69,11 @@ const withUrl = normaliseEvents(trig("issue.comment"), [
 		html_url: "https://github.com/HnskNoah/pi-claw/issues/3#issuecomment-5262079650",
 	},
 ]);
-assert.equal(withUrl[0].payload.message, "HnskNoah 在 issue #3 说: 现在看得到吗", "html_url 解析出真实 issue 号");
+assert.equal(
+	withUrl[0].payload.message,
+	"[github-issue#3] HnskNoah 在 issue #3 说: 现在看得到吗",
+	"html_url 解析出真实 issue 号 + 来源标记",
+);
 
 // 3. discussion 游标 = number:updated_at,时间戳回退(commit 15c1c98 修复)
 const d1 = { number: 2, title: "聊天", user: { login: "HnskNoah" }, body: "a", updated_at: "2026-08-12T01:00:00Z", comments: 1 };
@@ -113,7 +117,7 @@ assert.equal(rolled.fresh.length, 0, "数字游标离页 → 静默前进,不重
 const opened = normaliseEvents(trig("issues.opened"), [
 	{ number: 9, title: "标题", user: { login: "HnskNoah" }, state: "open", body: "正文", created_at: "2026-08-12T05:00:00Z" },
 ]);
-assert.match(opened[0].payload.message as string, /打开了 issue #9「标题」/);
+assert.match(opened[0].payload.message as string, /\[github-issue#9\] .*打开了 issue #9「标题」/);
 
 // 6. 频率退化: 10s → 30s → 60s, 有 fresh 立即回 10s
 const base = 10_000;
