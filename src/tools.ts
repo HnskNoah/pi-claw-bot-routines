@@ -11,7 +11,7 @@ import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-ag
 import { ghLogger } from "./log.ts";
 import { armRoutine, stopRoutine } from "./poller.ts";
 import { saveStore } from "./store.ts";
-import { getDb } from "./db.ts";
+import { getDb, recordReply } from "./db.ts";
 import { execFile } from "node:child_process";
 
 /** gh CLI 调用(不经 shell, 无引号注入问题; body 中文/换行直传)。 */
@@ -406,7 +406,7 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 		name: "RoutineReply",
 		label: "Routine: Reply",
 		description:
-			"Reply to a GitHub issue or discussion as the bot. Wraps REST (issue) and GraphQL (discussion; REST discussions 404 for App tokens). Use this instead of raw gh commands.",
+			"Reply to a GitHub issue or discussion as the bot. Wraps REST (issue) and GraphQL (discussion). target 按消息标签推导: [github-issue#N]→issue, [github-discussion#N]→discussion。回复自动落库。",
 		parameters: Type.Object({
 			target: Type.Union([Type.Literal("issue"), Type.Literal("discussion")]),
 			repo: Type.String({ description: "Owner/name, e.g. HnskNoah/pi-claw" }),
@@ -425,6 +425,7 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 						details: { error: res.error ?? res.stderr },
 						content: [{ type: "text", text: "Reply failed: " + (res.error ?? res.stderr) }],
 					};
+				recordReply(target, repo, number, body, res.stdout.trim());
 				return {
 					details: { target, repo, number, url: res.stdout.trim() },
 					content: [{ type: "text", text: `Replied to issue #${number}: ${res.stdout.trim()}` }],
@@ -448,6 +449,7 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 				};
 			const parsed = JSON.parse(gql.stdout || "{}") as { data?: { addDiscussionComment?: { comment?: { url?: string } } } };
 			const url = parsed.data?.addDiscussionComment?.comment?.url;
+			if (url) recordReply(target, repo, number, body, url);
 			return {
 				details: { target, repo, number, url },
 				content: [

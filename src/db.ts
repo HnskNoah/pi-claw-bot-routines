@@ -70,3 +70,17 @@ export function recordMessage(ev: MessageRecord, routineName: string): void {
 		// 记录失败不阻断注入
 	}
 }
+
+/** 记录 bot 回帖 → SQLite 变成完整对话流(幂等 id=评论 url, 失败静默)。 */
+export function recordReply(target: "issue" | "discussion", repo: string, number: number, body: string, url: string): void {
+	try {
+		const d = getDb();
+		if (!d || !url) return;
+		d.prepare(
+			`INSERT OR IGNORE INTO messages (id, routine, event, author, body, url, gh_time)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		).run(url, "reply", `reply:${target}:${repo}#${number}`, "hanenoah-bot", body, url, new Date().toISOString());
+	} catch {
+		// 落库失败不阻断回帖
+	}
+}

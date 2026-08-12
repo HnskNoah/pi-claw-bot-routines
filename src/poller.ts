@@ -146,7 +146,7 @@ async function pruneBotDiscussionEvents(
 					...ev.payload,
 					user: last.user?.login ?? ev.payload.user,
 					body: last.body,
-					message: `[RoutineReply:discussion][${trig.repo}][github-discussion#${n}] ${last.user?.login ?? "?"}: "${last.body}"`,
+					message: `[${trig.repo}][github-discussion#${n}] ${last.user?.login ?? "?"}: "${clipBody(last.body)}"`,
 				};
 			}
 			kept.push(ev);
@@ -272,7 +272,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				actor: uname,
 				issue_number: it.issue?.number,
 				created_at: it.created_at,
-				message: `[RoutineReply:issue][${trigger.repo}][github-issue#${it.issue?.number}] ${uname}: 触发了「${it.event}」事件`,
+				message: `[${trigger.repo}][github-issue#${it.issue?.number}] ${uname}: 触发了「${it.event}」事件`,
 			};
 		} else if (trigger.event === "discussion") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -284,7 +284,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				user: uname,
 				body: it.body,
 				updated_at: it.updated_at,
-				message: `[RoutineReply:discussion][${trigger.repo}][github-discussion#${it.number}] ${uname}: "${it.body}"`,
+				message: `[${trigger.repo}][github-discussion#${it.number}] ${uname}: "${clipBody(it.body)}"`,
 			};
 		} else if (trigger.event === "issue.comment") {
 			// 跳过 bot 作者(含我们自己),防自触发环
@@ -307,8 +307,8 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				discussion_number: it.discussion_number,
 				message:
 					issueNum !== undefined
-						? `[RoutineReply:issue][${trigger.repo}][github-issue#${issueNum}] ${uname}: "${it.body}"`
-						: `[RoutineReply:issue][${trigger.repo}][github] ${uname}: "${it.body}"`,
+						? `[${trigger.repo}][github-issue#${issueNum}] ${uname}: "${clipBody(it.body)}"`
+						: `[${trigger.repo}][github] ${uname}: "${clipBody(it.body)}"`,
 			};
 		} else if (trigger.event === "discussion.comment") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -321,8 +321,8 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				comments: it.comments,
 				updated_at: it.updated_at,
 				message: id
-					? `[RoutineReply:discussion][${trigger.repo}][github-discussion#${it.number}] ${uname}: "有新动态(评论数 ${it.comments})"`
-					: `[RoutineReply:discussion][${trigger.repo}][github-discussion#${it.number}] ${uname}`,
+					? `[${trigger.repo}][github-discussion#${it.number}] ${uname}: "有新动态(评论数 ${it.comments})"`
+					: `[${trigger.repo}][github-discussion#${it.number}] ${uname}`,
 			};
 		} else {
 			if (typeof it.number === "number") id = String(it.number);
@@ -334,7 +334,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				state: it.state,
 				created_at: it.created_at,
 				body: it.body,
-				message: `[RoutineReply:issue][${trigger.repo}][github-issue#${it.number}] ${uname}: ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${it.body}`,
+				message: `[${trigger.repo}][github-issue#${it.number}] ${uname}: ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${clipBody(it.body)}`,
 			};
 		}
 		if (id) out.push({ id, event: trigger.event, payload });
@@ -456,7 +456,6 @@ export function buildPrompt(
 	// 固定引导句前置(所有注入共享此前缀 → provider prefix-cache 友好), tick/time 后置(可变)。
 	// 固定引导句绝对前置(共享前缀 → prefix-cache 友好), routine 名随后, tick/time 放最尾(可变不破坏前缀)。
 	const prefix = `像处理本地会话消息一样自然处理。[↺ routine: ${routine.name}] `;
-	const tail = ` tick ${nextTick} · ${hhmm}`;
 	const truncNote = truncated ? "\n\n[state truncated]" : "";
 	const quietFooter = routine.quiet
 		? "\n\n---\n" +
@@ -465,8 +464,14 @@ export function buildPrompt(
 		: "";
 
 	return (
-		prefix + (routine.context ? `${routine.context}\n\n` : "") + substituted + tail + truncNote + quietFooter
+		prefix + (routine.context ? `${routine.context}\n\n` : "") + substituted + truncNote + quietFooter
 	);
+}
+
+/** 超长正文截断: 消息保持轻, 全文留在库/远端, 模型按需 RoutineMessages 查。 */
+export function clipBody(body: string, limit = 2000): string {
+	if (body.length <= limit) return body;
+	return body.slice(0, limit) + `…(全文 ${body.length} 字, RoutineMessages 可查)`;
 }
 
 // ─── tick + arm ──────────────────────────────────────────────────────────────
