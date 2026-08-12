@@ -234,6 +234,7 @@ export function endpointFor(trigger: GithubTrigger, branch?: string): string {
 /** 规范化事件:单调可比的 id + 聊天式 message 的裁剪 payload。 */
 export interface NormalisedEvent {
 	id: string;
+	event?: string;
 	payload: Record<string, unknown>;
 }
 
@@ -325,7 +326,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				message: `[github-issue#${it.number}] ${uname} ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${it.body}`,
 			};
 		}
-		if (id) out.push({ id, payload });
+		if (id) out.push({ id, event: trigger.event, payload });
 	}
 	return out;
 }
