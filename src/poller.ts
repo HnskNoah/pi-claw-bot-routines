@@ -222,7 +222,13 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 			if (typeof login === "string" && login.endsWith("[bot]")) continue;
 			if (typeof it.id === "number") id = String(it.id);
 			const uname: string = login ?? "?";
-			const issueNum = it.issue?.number ?? it.issue_number;
+			// GitHub API 的 issue.comment 条目里 issue.number 是 null(已知 quirk) ——
+			// 从 html_url(https://github.com/owner/repo/issues/N#issuecomment-...) 解析真实号,
+			// 否则注入消息会显示 #undefined(曾导致 bot 猜错 issue 回错帖)。
+			const htmlUrl = typeof it.html_url === "string" ? it.html_url : "";
+			const urlMatch = /\/issues\/(\d+)/.exec(htmlUrl);
+			const issueNum =
+				it.issue?.number ?? it.issue_number ?? (urlMatch ? Number(urlMatch[1]) : undefined);
 			payload = {
 				body: it.body,
 				user: it.user?.login,

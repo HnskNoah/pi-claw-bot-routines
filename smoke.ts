@@ -34,6 +34,18 @@ const withBot = normaliseEvents(trig("issue.comment"), [
 assert.equal(withBot.length, 1, "[bot] 作者被跳过");
 assert.equal(withBot[0].payload.message, "HnskNoah 在 issue #undefined 说: hello");
 
+// 2b. issue.number=null quirk:从 html_url 解析真实 issue 号(曾导致回错帖)
+const withUrl = normaliseEvents(trig("issue.comment"), [
+	{
+		id: 12,
+		user: { login: "HnskNoah" },
+		body: "现在看得到吗",
+		created_at: "2026-08-12T06:00:00Z",
+		html_url: "https://github.com/HnskNoah/pi-claw/issues/3#issuecomment-5262079650",
+	},
+]);
+assert.equal(withUrl[0].payload.message, "HnskNoah 在 issue #3 说: 现在看得到吗", "html_url 解析出真实 issue 号");
+
 // 3. discussion 游标 = number:updated_at,时间戳回退(commit 15c1c98 修复)
 const d1 = { number: 2, title: "聊天", user: { login: "HnskNoah" }, body: "a", updated_at: "2026-08-12T01:00:00Z", comments: 1 };
 const d2 = { number: 2, title: "聊天", user: { login: "HnskNoah" }, body: "a", updated_at: "2026-08-12T01:05:00Z", comments: 2 };
