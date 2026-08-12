@@ -453,9 +453,8 @@ export function buildPrompt(
 		.replaceAll("{githubEvent}", msg)
 		.replaceAll("{githubMessage}", msg);
 
-	// 消息注入同会话, 上下文由 pi 管理(历史+compaction)——不再注入 Previous state 段。
-	// userState 计算保留(向后兼容 {state} 占位符), 但 header 不含。
-	const header = `[↺ routine: ${routine.name} · tick ${nextTick} · ${hhmm}]\n\n`;
+	// 固定引导句前置(所有注入共享此前缀 → provider prefix-cache 友好), tick/time 后置(可变)。
+	const header = `[↺ routine: ${routine.name}] 像处理本地会话消息一样自然处理。 · tick ${nextTick} · ${hhmm}\n\n`;
 	const truncNote = truncated ? "\n\n[state truncated]" : "";
 	const quietFooter = routine.quiet
 		? "\n\n---\n" +
@@ -609,7 +608,15 @@ async function tick(
 			const tickState: RoutineTickState =
 				runtime.store.tickState[routine.id] ?? { tickCount: 0, userState: {} };
 			const prompt = buildPrompt(live, tickState, cwd, ev.payload);
-			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			// custom 消息 + display:false → TUI 静默, 模型上下文可见(convertToLlm 转 user)
+			pi.sendMessage(
+				{
+					customType: "routine-fire",
+					content: [{ type: "text", text: prompt }],
+					display: false,
+				},
+				{ deliverAs: "followUp" },
+			);
 			recordMessage(ev, live.name);
 			ghLogger.info({ routine: live.name, event: trig.event }, "fire");
 		} catch (err) {
