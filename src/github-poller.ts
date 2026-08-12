@@ -1,9 +1,18 @@
 /**
- * @file github-poller.ts — TP-011 GitHub event trigger.
+ * @file github-poller.ts — TP-011 GitHub message bridge.
  *
  * Owns the `case "github"` arm of `scheduler.armTrigger`. Each armed trigger
- * runs `gh api` periodically and, on previously-unseen events, calls the
- * shared {@link enqueueFireRequest} so each event keeps its own payload.
+ * runs `gh api` periodically and, on previously-unseen events, injects a
+ * chat-style user message straight into pi's own message queue via
+ * {@link buildPrompt} + `pi.sendUserMessage({deliverAs:"followUp"})`.
+ *
+ * This path deliberately does NOT use the routine fire bookkeeping (fire
+ * queue, guard, tick counts, daily caps): pi's `_followUpMessages` FIFO is
+ * the queue — unbounded, ordered, zero loss — so consecutive GitHub messages
+ * are processed one turn at a time exactly like TUI messages. The only state
+ * we persist is the poll `cursor`; the {state} summary is refreshed by the
+ * injected turn itself via RoutineSetState. Observability comes from the
+ * pino log lines (poll / fire / inject failed).
  *
  * Design rules:
  *   - Poll interval is bounded by {@link MIN_GITHUB_POLL_MS}; smaller values
@@ -14,6 +23,9 @@
  *     capped at {@link MAX_GITHUB_BACKOFF_MS}. A successful tick resets.
  *   - Missing `gh` (ENOENT) → log once, leave the timer slot null, never
  *     crash. Other routines keep running.
+ *   - Paused routines are skipped here: injection bypasses the scheduler's
+ *     paused gate (no `enqueueFireRequest`), so we check `live.paused`
+ *     ourselves before injecting.
  *   - Push branch filters poll branch-specific endpoints with independent
  *     cursors. Cursor loss advances without replaying the bounded result page.
  *   - Each fresh event is queued before its cursor is persisted, preferring
@@ -615,14 +627,14 @@ export async function tickGithub(
 		.map(({ event }) => event);
 	for (const ev of chronological) {
 		try {
-			// patched by pi: reuse pi's own message queue instead of the routine
-			// fire queue. pi.sendUserMessage({deliverAs:"followUp"}) appends to the
-			// unbounded `_followUpMessages` FIFO, so consecutive GitHub messages are
-			// processed one turn at a time like TUI messages — no loss (the routine
-			// queue drops the oldest at depth 3), natural ordering, pi manages the
-			// context. The routine-side bookkeeping (ticks, daily caps) isn't used by
-			// polling: the pino fire line covers observability and the {state}
-			// summary is refreshed by the injected turn itself.
+			// The routine fire queue is gone for this path — pi's own message
+			// queue is the queue (unbounded `_followUpMessages` FIFO, one turn
+			// per message, TUI-like). Injection bypasses the scheduler's paused
+			// gate, so check it here.
+			if (live.paused) {
+				ghLogger.info({ routine: live.name }, "paused — skip inject");
+				continue;
+			}
 			const tickState: RoutineTickState =
 				runtime.store.tickState[routine.id] ?? ({} as RoutineTickState);
 			let cwd: string;

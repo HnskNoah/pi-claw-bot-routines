@@ -342,13 +342,6 @@ export interface RoutineRuntimeState {
 	 * the `{apiArgs}` template variable. Non-persisted.
 	 */
 	apiArgs?: Map<string, Record<string, unknown>>;
-	/**
-	 * Github event payload for in-flight github-triggered fires. Populated
-	 * by `github-poller.ts` before enqueue, consumed by
-	 * `executor.buildPrompt` via the `{githubEvent}` template variable.
-	 * Non-persisted; cleared on consume.
-	 */
-	githubEvents?: Map<string, Record<string, unknown>>;
 	pendingRun: {
 		routineId: string;
 		runId: string;

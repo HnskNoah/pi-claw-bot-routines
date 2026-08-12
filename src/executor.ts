@@ -203,8 +203,9 @@ export async function fireRoutine(
 
 		const apiArgs = request?.apiArgs ?? runtime.apiArgs?.get(routine.id) ?? null;
 		runtime.apiArgs?.delete(routine.id);
-		const githubEvent = request?.githubEvent ?? runtime.githubEvents?.get(routine.id) ?? null;
-		runtime.githubEvents?.delete(routine.id);
+		// patched by pi: github bridge injects via sendUserMessage with the
+		// prompt already rendered; the legacy githubEvents map is gone.
+		const githubEvent = request?.githubEvent ?? null;
 		// patched by pi: fire log line (user: mature logging)
 		ghLogger.info({ routine: routine.name, tick: tickState.tickCount + 1 }, "fire");
 		const prompt = buildPrompt(
