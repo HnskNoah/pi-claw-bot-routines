@@ -183,7 +183,7 @@ function asArray(json: unknown): Record<string, unknown>[] {
 	return Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
 }
 
-function normaliseEvents(trigger: GithubTrigger, json: unknown): NormalisedEvent[] {
+export function normaliseEvents(trigger: GithubTrigger, json: unknown): NormalisedEvent[] {
 	const out: NormalisedEvent[] = [];
 	for (const rawIt of asArray(json)) {
 		const it = rawIt as Record<string, any>;
@@ -297,7 +297,7 @@ function filterEvents(trigger: GithubTrigger, events: NormalisedEvent[]): Normal
  *  - 游标不在页内 → 对 number:updated_at 型游标按时间戳比较(对象被更新,
  *    updated_at 变了,旧游标合法消失);纯数字游标则视为页面滚动,静默前进
  */
-function eventsAfterCursor(
+export function eventsAfterCursor(
 	events: NormalisedEvent[],
 	cursor: string | undefined,
 ): { nextCursor?: string; fresh: NormalisedEvent[] } {
