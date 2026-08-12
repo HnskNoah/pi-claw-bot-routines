@@ -52,17 +52,19 @@ export function recordMessage(ev: MessageRecord, routineName: string): void {
 		const d = getDb();
 		if (!d) return;
 		const p = ev.payload as Record<string, unknown>;
+		const s = (v: unknown): string | null =>
+			typeof v === "string" ? v : v === null || v === undefined ? null : String(v);
 		d.prepare(
 			`INSERT OR IGNORE INTO messages (id, routine, event, author, body, url, gh_time)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		).run(
-			ev.id,
-			routineName,
-			ev.event ?? null,
-			p.user ?? p.author ?? null,
-			p.body ?? p.message ?? null,
-			p.html_url ?? null,
-			p.created_at ?? p.updated_at ?? null,
+			s(ev.id),
+			s(routineName),
+			s(ev.event),
+			s(p.user ?? p.author),
+			s(p.body ?? p.message),
+			s(p.html_url),
+			s(p.created_at ?? p.updated_at),
 		);
 	} catch {
 		// 记录失败不阻断注入
