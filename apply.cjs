@@ -28,6 +28,7 @@ const files = [
   "src/store.ts",
   "src/tools/routine-create.ts",
   "src/tools/_mutate.ts",
+  "src/pi-log.ts",
 ];
 
 function main() {
@@ -55,6 +56,27 @@ function main() {
     fs.copyFileSync(src, dst);
     ok++;
   }
+
+  // Restore extra dependencies (e.g. pino) recorded in the patch package.json.
+  const patchPkgPath = path.join(here, "package.json");
+  if (fs.existsSync(patchPkgPath)) {
+    const patchDeps = JSON.parse(fs.readFileSync(patchPkgPath, "utf8")).dependencies ?? {};
+    const missing = Object.keys(patchDeps).filter((d) => !installed.dependencies?.[d]);
+    if (missing.length > 0) {
+      console.log(`⏳ installing missing deps: ${missing.join(", ")} ...`);
+      const { execSync } = require("child_process");
+      try {
+        execSync(`npm install ${missing.map((d) => `${d}@${patchDeps[d]}`).join(" ")}`, {
+          cwd: pkgDir,
+          stdio: "inherit",
+        });
+        console.log("✓ deps installed");
+      } catch (e) {
+        console.error("✗ dep install failed — run it manually:", e.message);
+      }
+    }
+  }
+
   console.log(`✓ applied ${ok}/${files.length} patched files to ${pkgDir}`);
   console.log("  Next: /reload pi (and re-run `npx tsc --noEmit` in the package dir to be safe).");
 }

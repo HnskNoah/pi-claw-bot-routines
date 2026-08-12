@@ -19,12 +19,10 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { appendFileSync } from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { nanoid } from "nanoid";
 import * as guard from "./guard.ts";
 import { unscheduleRoutine } from "./scheduler.ts";
+import { ghLogger } from "./pi-log.ts";
 import { saveStore } from "./store.ts";
 import type {
 	Routine,
@@ -207,15 +205,8 @@ export async function fireRoutine(
 		runtime.apiArgs?.delete(routine.id);
 		const githubEvent = request?.githubEvent ?? runtime.githubEvents?.get(routine.id) ?? null;
 		runtime.githubEvents?.delete(routine.id);
-		// patched by pi: fire log line (user: "你没做log吗")
-		try {
-			appendFileSync(
-				process.env.PI_GH_LOG ?? path.join(os.homedir(), ".pi", "agent", "logs", "pi-claw.log"),
-				`${new Date().toISOString()} fire routine=${routine.name} tick=${tickState.tickCount + 1}\n`,
-			);
-		} catch {
-			/* logging must never break firing */
-		}
+		// patched by pi: fire log line (user: mature logging)
+		ghLogger.info({ routine: routine.name, tick: tickState.tickCount + 1 }, "fire");
 		const prompt = buildPrompt(
 			routine,
 			tickState,

@@ -24,23 +24,14 @@
  */
 
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { enqueueFireRequest } from "./scheduler.ts";
 import { saveStore } from "./store.ts";
 import type { GithubTrigger, Routine, RoutineRuntimeState } from "./types.ts";
-
-// patched by pi: plain-text log of poll/fire/error events (user: "你没做log吗")
-const LOG_FILE = process.env.PI_GH_LOG ?? path.join(os.homedir(), ".pi", "agent", "logs", "pi-claw.log");
-export function ghLog(line: string): void {
-	try {
-		appendFileSync(LOG_FILE, `${new Date().toISOString()} ${line}\n`);
-	} catch {
-		/* logging must never break polling */
-	}
-}
+import { ghLogger } from "./pi-log.ts";
 import { MAX_GITHUB_BACKOFF_MS, MIN_GITHUB_POLL_MS } from "./types.ts";
 
 // ─── Test seam ───────────────────────────────────────────────────────────────
@@ -610,16 +601,27 @@ export async function tickGithub(
 			enqueueFireRequest(live, triggerIndex, runtime, pi, getCtx, { githubEvent: ev.payload });
 		} catch (err) {
 			console.error(`[pi-routines] github enqueue failed for '${routine.name}':`, err);
-			ghLog(`ERROR enqueue-failed routine=${routine.name} ${String(err)}`);
+			ghLogger.error({ routine: routine.name }, "enqueue failed");
+			ghLogger.error({ err: String(err) }, "enqueue error");
 		}
 	}
-	// patched by pi: one log line per poll cycle (user: "你没做log吗")
-	ghLog(
-		`poll routine=${routine.name} event=${trig.event} ok=${successfulPolls.length}/${polls.length}` +
-			` fresh=${fresh.length} cursor=${trig.cursor ?? "-"} delay=${nextDelay}"`,
+	// patched by pi: one structured log line per poll cycle (user: mature logging)
+	ghLogger.info(
+		{
+			routine: routine.name,
+			event: trig.event,
+			ok: `${successfulPolls.length}/${polls.length}`,
+			fresh: fresh.length,
+			cursor: trig.cursor ?? "-",
+			delay: nextDelay,
+		},
+		"poll",
 	);
 	if (failures.length > 0) {
-		ghLog(`ERROR poll-failed routine=${routine.name} ${failures.map((f) => f.result.error).join("; ")}`);
+		ghLogger.error(
+			{ routine: routine.name, errors: failures.map((f) => f.result.error) },
+			"poll failed",
+		);
 	}
 	if (cursorChanged || seeded) {
 		await saveStore(runtime.store, runtime.storeGeneration);

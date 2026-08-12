@@ -22,7 +22,9 @@ verify the copy is clean.
 | `src/types.ts` | Event enum + `GithubEventUnion` + schema: added `issues.closed`, `issues.events`, `discussion`, `issue.comment`, `discussion.comment` (9 total). `MIN_GITHUB_POLL_MS` 60s → **10s** (user requirement). |
 | `src/parser.ts` | `MIN_MS` 30_000 → **10_000** (10s poll floor). |
 | `src/github-poller.ts` | `endpointFor`: issue.comment → `issues/comments?sort=created&direction=desc`, discussion.comment → `discussions/comments?...`; discussion event id = `number:updated_at`; issues.events id = own `id`. `normaliseEvents`: comment events skip `[bot]` authors (prevents self-loop); payload trimmed to essentials + a chat-style `message` line for every event type. **401 auto-refresh**: on unauthorized `gh` response, runs `refresh-bot-token.js` (path from `$PI_GH_REFRESH_SCRIPT` or `~/Dev/pi-agent/refresh-bot-token.js`) and retries once before backing off. |
-| `src/executor.ts` | `buildPrompt`: `{githubEvent}` injects the chat-style `message` text when present (fallback: JSON); new alias placeholder `{githubMessage}`. |
+| `src/executor.ts` | `buildPrompt`: `{githubEvent}` injects the chat-style `message` text when present (fallback: JSON); new alias placeholder `{githubMessage}`. Fire events logged via pino. |
+| `src/pi-log.ts` | **new file**: shared pino logger → JSON Lines to `~/.pi/agent/logs/pi-claw.log` (`$PI_GH_LOG` to override, `$PI_GH_LOG_LEVEL` e.g. debug). Mature logging swap for the earlier text hack (user: "日志是一个很成熟的领域了"). |
+| `package.json` | added dependency `pino` (apply.js restores it after reinstall). |
 | `src/store.ts` | Persisted schema/union updates for the new events; store validation accepts them. |
 | `src/tools/routine-create.ts` | Trigger creation accepts the new events. |
 | `src/tools/_mutate.ts` | Mutation validation union updated for new events. |

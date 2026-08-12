@@ -1,0 +1,75 @@
+{
+  "name": "@davecodes/pi-routines",
+  "version": "0.5.1",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "extensions/",
+    "src/",
+    "skills/",
+    "templates/",
+    "tsconfig.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "description": "Pi extension for scheduled and event-driven routines",
+  "keywords": [
+    "pi",
+    "pi-package",
+    "pi-extension",
+    "pi-coding-agent",
+    "routines",
+    "scheduler",
+    "agent",
+    "llm"
+  ],
+  "license": "MIT",
+  "author": "David Creador",
+  "homepage": "https://github.com/Davidcreador/pi-routines",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Davidcreador/pi-routines.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Davidcreador/pi-routines/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:smoke": "tsx src/parser.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "prepublishOnly": "pnpm check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.75.3 <1",
+    "@earendil-works/pi-tui": ">=0.75.3 <1"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.0",
+    "pino": "^10.3.1",
+    "typebox": "^1.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5.6.0"
+  }
+}
