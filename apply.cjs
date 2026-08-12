@@ -29,6 +29,8 @@ const files = [
   "src/tools/routine-create.ts",
   "src/tools/_mutate.ts",
   "src/pi-log.ts",
+  "src/scheduler.ts",
+  "src/hooks.ts",
 ];
 
 function main() {
