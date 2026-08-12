@@ -59,8 +59,8 @@ const withBot = normaliseEvents(trig("issue.comment"), [
 assert.equal(withBot.length, 1, "[bot] 作者被跳过");
 assert.equal(
 	withBot[0].payload.message,
-	"[HnskNoah/pi-claw][github] HnskNoah: \"hello\"",
-	"无 issue 号回退 [github] + repo 前缀",
+	"[RoutineReply:issue][HnskNoah/pi-claw][github] HnskNoah: \"hello\"",
+	"无 issue 号回退 + repo 前缀 + 工具标记",
 );
 
 // 2b. issue.number=null quirk:从 html_url 解析真实 issue 号(曾导致回错帖)
@@ -75,8 +75,8 @@ const withUrl = normaliseEvents(trig("issue.comment"), [
 ]);
 assert.equal(
 	withUrl[0].payload.message,
-	"[HnskNoah/pi-claw][github-issue#3] HnskNoah: \"现在看得到吗\"",
-	"html_url 解析真实 issue 号 + repo 前缀 + 引文格式",
+	"[RoutineReply:issue][HnskNoah/pi-claw][github-issue#3] HnskNoah: \"现在看得到吗\"",
+	"真实 issue 号 + repo 前缀 + 引文格式 + 工具标记",
 );
 
 // 3. discussion 游标 = number:updated_at,时间戳回退(commit 15c1c98 修复)
@@ -121,7 +121,7 @@ assert.equal(rolled.fresh.length, 0, "数字游标离页 → 静默前进,不重
 const opened = normaliseEvents(trig("issues.opened"), [
 	{ number: 9, title: "标题", user: { login: "HnskNoah" }, state: "open", body: "正文", created_at: "2026-08-12T05:00:00Z" },
 ]);
-assert.match(opened[0].payload.message as string, /\[HnskNoah\/pi-claw\]\[github-issue#9\] .*打开了「标题」/);
+assert.match(opened[0].payload.message as string, /\[RoutineReply:issue\]\[HnskNoah\/pi-claw\]\[github-issue#9\] .*打开了「标题」/);
 // 9b. discussion 消息也用 [github-discussion#N], 正文不重复 #N
 const dCom = normaliseEvents(trig("discussion.comment"), [
 	{
@@ -134,7 +134,7 @@ const dCom = normaliseEvents(trig("discussion.comment"), [
 ]);
 assert.equal(
 	dCom[0].payload.message,
-	"[HnskNoah/pi-claw][github-discussion#2] HnskNoah: \"有新动态(评论数 7)\"",
+	"[RoutineReply:discussion][HnskNoah/pi-claw][github-discussion#2] HnskNoah: \"有新动态(评论数 7)\"",
 	"discussion 标记格式(normaliseEvents 层占位, 真实引文由 prune 替换)",
 );
 
