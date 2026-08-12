@@ -14,6 +14,25 @@ import {
 	nextIdleDelay,
 	normaliseEvents,
 } from "./src/poller.ts";
+import { DatabaseSync } from "node:sqlite";
+
+// 8. 消息落库: 建表 + INSERT OR IGNORE 幂等
+const mem = new DatabaseSync(":memory:");
+mem.exec(`CREATE TABLE messages (
+	id TEXT PRIMARY KEY, routine TEXT, event TEXT, author TEXT,
+	body TEXT, url TEXT, gh_time TEXT, seen_at TEXT
+)`);
+const ins = mem.prepare(
+	`INSERT OR IGNORE INTO messages (id, routine, event, author, body, gh_time) VALUES (?, ?, ?, ?, ?, ?)`,
+);
+ins.run("7", "github-issue-chat", "issue.comment", "HnskNoah", "hello", "2026-08-12T00:00:00Z");
+ins.run("7", "github-issue-chat", "issue.comment", "HnskNoah", "hello", "2026-08-12T00:00:00Z"); // 重复
+assert.equal(
+	mem.prepare("SELECT COUNT(*) AS c FROM messages").get().c,
+	1,
+	"INSERT OR IGNORE 幂等: 同 id 只留一条",
+);
+assert.equal(mem.prepare("SELECT author FROM messages WHERE id='7'").get().author, "HnskNoah", "字段落库正确");
 import type { GithubTrigger } from "./src/types.ts";
 
 const trig = (event: string, repo = "HnskNoah/pi-claw"): GithubTrigger => ({

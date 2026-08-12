@@ -28,6 +28,7 @@ import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ghLogger } from "./log.ts";
 import { saveStore } from "./store.ts";
+import { recordMessage } from "./db.ts";
 import {
 	MAX_GITHUB_BACKOFF_MS,
 	MAX_USER_STATE_BYTES,
@@ -594,6 +595,7 @@ async function tick(
 				runtime.store.tickState[routine.id] ?? { tickCount: 0, userState: {} };
 			const prompt = buildPrompt(live, tickState, cwd, ev.payload);
 			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			recordMessage(ev, live.name);
 			ghLogger.info({ routine: live.name, event: trig.event }, "fire");
 		} catch (err) {
 			console.error(`[pi-claw] github inject failed for '${live.name}':`, err);
