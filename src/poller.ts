@@ -134,9 +134,20 @@ async function pruneBotDiscussionEvents(
 				kept.push(ev);
 				continue;
 			}
-			if (isBotAuthored(res.json as Array<{ user?: { login?: string } }>)) {
+			const comments = res.json as Array<{ user?: { login?: string }; body?: string }>;
+			if (isBotAuthored(comments)) {
 				ghLogger.info({ event: trig.event, discussion: n }, "discussion self-reply pruned");
 				continue;
+			}
+			// 已查过最新评论: 用真实评论重写 message(带 repo + 用户引文), 替换占位
+			const last = comments[comments.length - 1];
+			if (last && typeof last.body === "string") {
+				ev.payload = {
+					...ev.payload,
+					user: last.user?.login ?? ev.payload.user,
+					body: last.body,
+					message: `[${trig.repo}][github-discussion#${n}] ${last.user?.login ?? "?"}: "${last.body}"`,
+				};
 			}
 			kept.push(ev);
 		} catch {
@@ -261,7 +272,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				actor: uname,
 				issue_number: it.issue?.number,
 				created_at: it.created_at,
-				message: `[github-issue#${it.issue?.number}] ${uname} 触发了「${it.event}」事件`,
+				message: `[${trigger.repo}][github-issue#${it.issue?.number}] ${uname}: 触发了「${it.event}」事件`,
 			};
 		} else if (trigger.event === "discussion") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -273,7 +284,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				user: uname,
 				body: it.body,
 				updated_at: it.updated_at,
-				message: `[github-discussion#${it.number}] ${uname} 在「${it.title}」发言: ${it.body}`,
+				message: `[${trigger.repo}][github-discussion#${it.number}] ${uname}: "${it.body}"`,
 			};
 		} else if (trigger.event === "issue.comment") {
 			// 跳过 bot 作者(含我们自己),防自触发环
@@ -296,8 +307,8 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				discussion_number: it.discussion_number,
 				message:
 					issueNum !== undefined
-						? `[github-issue#${issueNum}] ${uname} 说: ${it.body}`
-						: `[github] ${uname} 在 issue #${issueNum} 说: ${it.body}`,
+						? `[${trigger.repo}][github-issue#${issueNum}] ${uname}: "${it.body}"`
+						: `[${trigger.repo}][github] ${uname}: "${it.body}"`,
 			};
 		} else if (trigger.event === "discussion.comment") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -310,8 +321,8 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				comments: it.comments,
 				updated_at: it.updated_at,
 				message: id
-					? `[github-discussion#${it.number}] ${uname} 在「${it.title}」有新动态(评论数 ${it.comments})`
-					: `[github-discussion#${it.number}] ${uname} 在「${it.title}」`,
+					? `[${trigger.repo}][github-discussion#${it.number}] ${uname}: "有新动态(评论数 ${it.comments})"`
+					: `[${trigger.repo}][github-discussion#${it.number}] ${uname}`,
 			};
 		} else {
 			if (typeof it.number === "number") id = String(it.number);
@@ -323,7 +334,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				state: it.state,
 				created_at: it.created_at,
 				body: it.body,
-				message: `[github-issue#${it.number}] ${uname} ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${it.body}`,
+				message: `[${trigger.repo}][github-issue#${it.number}] ${uname}: ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${it.body}`,
 			};
 		}
 		if (id) out.push({ id, event: trigger.event, payload });

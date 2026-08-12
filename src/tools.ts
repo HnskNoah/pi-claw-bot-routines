@@ -12,6 +12,25 @@ import { ghLogger } from "./log.ts";
 import { armRoutine, stopRoutine } from "./poller.ts";
 import { saveStore } from "./store.ts";
 import { getDb } from "./db.ts";
+import { execFile } from "node:child_process";
+
+/** gh CLI 调用(不经 shell, 无引号注入问题; body 中文/换行直传)。 */
+function runGh(
+	args: string[],
+	timeoutMs = 20_000,
+): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
+	return new Promise((resolve) => {
+		execFile(
+			"gh",
+			args,
+			{ timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true },
+			(err, stdout, stderr) => {
+				if (err) resolve({ ok: false, stdout, stderr, error: (err as Error).message });
+				else resolve({ ok: true, stdout, stderr });
+			},
+		);
+	});
+}
 import { MIN_GITHUB_POLL_MS, type Routine, type RoutineRuntime } from "./types.ts";
 
 const IdOrName = Type.Object({
@@ -380,6 +399,61 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 					content: [{ type: "text", text: "Query failed: " + String(err) }],
 				};
 			}
+		},
+	});
+
+	pi.registerTool({
+		name: "RoutineReply",
+		label: "Routine: Reply",
+		description:
+			"Reply to a GitHub issue or discussion as the bot. Wraps REST (issue) and GraphQL (discussion; REST discussions 404 for App tokens). Use this instead of raw gh commands.",
+		parameters: Type.Object({
+			target: Type.Union([Type.Literal("issue"), Type.Literal("discussion")]),
+			repo: Type.String({ description: "Owner/name, e.g. HnskNoah/pi-claw" }),
+			number: Type.Integer(),
+			body: Type.String({ description: "Reply body" }),
+		}),
+		async execute(
+			_toolCallId: string,
+			params: { target: "issue" | "discussion"; repo: string; number: number; body: string },
+		): Promise<AgentToolResult<Record<string, unknown>>> {
+			const { target, repo, number, body } = params;
+			if (target === "issue") {
+				const res = await runGh(["issue", "comment", String(number), "-R", repo, "--body", body]);
+				if (!res.ok)
+					return {
+						details: { error: res.error ?? res.stderr },
+						content: [{ type: "text", text: "Reply failed: " + (res.error ?? res.stderr) }],
+					};
+				return {
+					details: { target, repo, number, url: res.stdout.trim() },
+					content: [{ type: "text", text: `Replied to issue #${number}: ${res.stdout.trim()}` }],
+				};
+			}
+			// discussion: REST 404 → GraphQL addDiscussionComment
+			const nodeRes = await runGh(["api", `repos/${repo}/discussions/${number}`, "-q", ".node_id"]);
+			if (!nodeRes.ok)
+				return {
+					details: { error: nodeRes.error ?? nodeRes.stderr },
+					content: [{ type: "text", text: "Failed to resolve discussion node id: " + (nodeRes.error ?? nodeRes.stderr) }],
+				};
+			const nodeId = nodeRes.stdout.trim();
+			const query =
+				"mutation($id:ID!,$b:String!){addDiscussionComment(input:{discussionId:$id,body:$b}){comment{id url}}}";
+			const gql = await runGh(["api", "graphql", "-f", `query=${query}`, "-F", `id=${nodeId}`, "-F", `b=${body}`]);
+			if (!gql.ok)
+				return {
+					details: { error: gql.error ?? gql.stderr },
+					content: [{ type: "text", text: "Reply failed: " + (gql.error ?? gql.stderr) }],
+				};
+			const parsed = JSON.parse(gql.stdout || "{}") as { data?: { addDiscussionComment?: { comment?: { url?: string } } } };
+			const url = parsed.data?.addDiscussionComment?.comment?.url;
+			return {
+				details: { target, repo, number, url },
+				content: [
+					{ type: "text", text: `Replied to discussion #${number}${url ? ": " + url : ""}` },
+				],
+			};
 		},
 	});
 }
