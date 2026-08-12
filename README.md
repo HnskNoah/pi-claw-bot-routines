@@ -35,7 +35,7 @@ in `node_modules/` (gitignored).
 | `src/pi-log.ts` | **New**: pino JSON-Lines logger → `~/.pi/agent/logs/pi-claw.log` (`$PI_GH_LOG` path override, `$PI_GH_LOG_LEVEL` level). |
 | `src/scheduler.ts` / `src/hooks.ts` / `src/tools/_mutate.ts` | Small: 10s parsing, removed `githubEvents` map references. |
 | `src/tools/routine-create.ts` | Event enum unions for the 4 patched events. |
-| `package.json` | Added `pino ^10.3.1` dependency (deploy.ts restores it). |
+| `package.json` | Added `pino ^10.3.1` dependency (installed locally; gitignored). |
 
 Notes: `// patched by pi:` comments inside source mark the changeset for
 upstream diffing — they are our code now, kept as provenance markers.
