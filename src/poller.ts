@@ -260,7 +260,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				actor: uname,
 				issue_number: it.issue?.number,
 				created_at: it.created_at,
-				message: `[github-issue#${it.issue?.number}] ${uname} 对 issue #${it.issue?.number} 触发了「${it.event}」事件`,
+				message: `[github-issue#${it.issue?.number}] ${uname} 触发了「${it.event}」事件`,
 			};
 		} else if (trigger.event === "discussion") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -272,7 +272,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				user: uname,
 				body: it.body,
 				updated_at: it.updated_at,
-				message: `[github] ${uname} 在 discussion #${it.number}「${it.title}」发言: ${it.body}`,
+				message: `[github-discussion#${it.number}] ${uname} 在「${it.title}」发言: ${it.body}`,
 			};
 		} else if (trigger.event === "issue.comment") {
 			// 跳过 bot 作者(含我们自己),防自触发环
@@ -287,14 +287,16 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 			const urlMatch = /\/issues\/(\d+)/.exec(htmlUrl);
 			const issueNum =
 				it.issue?.number ?? it.issue_number ?? (urlMatch ? Number(urlMatch[1]) : undefined);
-			const issueTag = issueNum !== undefined ? `[github-issue#${issueNum}] ` : "[github] ";
 			payload = {
 				body: it.body,
 				user: it.user?.login,
 				created_at: it.created_at,
 				issue_number: issueNum,
 				discussion_number: it.discussion_number,
-				message: `${issueTag}${uname} 在 issue #${issueNum} 说: ${it.body}`,
+				message:
+					issueNum !== undefined
+						? `[github-issue#${issueNum}] ${uname} 说: ${it.body}`
+						: `[github] ${uname} 在 issue #${issueNum} 说: ${it.body}`,
 			};
 		} else if (trigger.event === "discussion.comment") {
 			if (typeof it.number === "number" && typeof it.updated_at === "string")
@@ -307,8 +309,8 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				comments: it.comments,
 				updated_at: it.updated_at,
 				message: id
-					? `[github] ${uname} 在 discussion #${it.number}「${it.title}」有新动态(评论数 ${it.comments})`
-					: `[github] ${uname} 在 discussion #${it.number}「${it.title}」`,
+					? `[github-discussion#${it.number}] ${uname} 在「${it.title}」有新动态(评论数 ${it.comments})`
+					: `[github-discussion#${it.number}] ${uname} 在「${it.title}」`,
 			};
 		} else {
 			if (typeof it.number === "number") id = String(it.number);
@@ -320,7 +322,7 @@ export function normaliseEvents(trigger: GithubTrigger, json: unknown): Normalis
 				state: it.state,
 				created_at: it.created_at,
 				body: it.body,
-				message: `[github-issue#${it.number}] ${uname} ${trigger.event === "issues.closed" ? "关闭了" : "打开了"} issue #${it.number}「${it.title}」: ${it.body}`,
+				message: `[github-issue#${it.number}] ${uname} ${trigger.event === "issues.closed" ? "关闭了" : "打开了"}「${it.title}」: ${it.body}`,
 			};
 		}
 		if (id) out.push({ id, payload });

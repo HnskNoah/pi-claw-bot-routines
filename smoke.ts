@@ -71,8 +71,8 @@ const withUrl = normaliseEvents(trig("issue.comment"), [
 ]);
 assert.equal(
 	withUrl[0].payload.message,
-	"[github-issue#3] HnskNoah 在 issue #3 说: 现在看得到吗",
-	"html_url 解析出真实 issue 号 + 来源标记",
+	"[github-issue#3] HnskNoah 说: 现在看得到吗",
+	"html_url 解析出真实 issue 号 + 来源标记, 正文不重复 #N",
 );
 
 // 3. discussion 游标 = number:updated_at,时间戳回退(commit 15c1c98 修复)
@@ -117,7 +117,22 @@ assert.equal(rolled.fresh.length, 0, "数字游标离页 → 静默前进,不重
 const opened = normaliseEvents(trig("issues.opened"), [
 	{ number: 9, title: "标题", user: { login: "HnskNoah" }, state: "open", body: "正文", created_at: "2026-08-12T05:00:00Z" },
 ]);
-assert.match(opened[0].payload.message as string, /\[github-issue#9\] .*打开了 issue #9「标题」/);
+assert.match(opened[0].payload.message as string, /\[github-issue#9\] .*打开了「标题」/);
+// 9b. discussion 消息也用 [github-discussion#N], 正文不重复 #N
+const dCom = normaliseEvents(trig("discussion.comment"), [
+	{
+		number: 2,
+		title: "聊天0812",
+		user: { login: "HnskNoah" },
+		comments: 7,
+		updated_at: "2026-08-12T03:57:20Z",
+	},
+]);
+assert.equal(
+	dCom[0].payload.message,
+	"[github-discussion#2] HnskNoah 在「聊天0812」有新动态(评论数 7)",
+	"discussion 标记格式",
+);
 
 // 6. 频率退化: 10s → 30s → 60s, 有 fresh 立即回 10s
 const base = 10_000;
