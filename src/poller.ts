@@ -454,7 +454,9 @@ export function buildPrompt(
 		.replaceAll("{githubMessage}", msg);
 
 	// 固定引导句前置(所有注入共享此前缀 → provider prefix-cache 友好), tick/time 后置(可变)。
-	const header = `[↺ routine: ${routine.name}] 像处理本地会话消息一样自然处理。 · tick ${nextTick} · ${hhmm}\n\n`;
+	// 固定引导句绝对前置(共享前缀 → prefix-cache 友好), routine 名随后, tick/time 放最尾(可变不破坏前缀)。
+	const prefix = `像处理本地会话消息一样自然处理。[↺ routine: ${routine.name}] `;
+	const tail = ` tick ${nextTick} · ${hhmm}`;
 	const truncNote = truncated ? "\n\n[state truncated]" : "";
 	const quietFooter = routine.quiet
 		? "\n\n---\n" +
@@ -463,7 +465,7 @@ export function buildPrompt(
 		: "";
 
 	return (
-		header + (routine.context ? `${routine.context}\n\n` : "") + substituted + truncNote + quietFooter
+		prefix + (routine.context ? `${routine.context}\n\n` : "") + substituted + tail + truncNote + quietFooter
 	);
 }
 
