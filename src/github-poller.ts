@@ -392,6 +392,23 @@ function eventsAfterCursor(
 	if (cursorIndex < 0) {
 		// The page is bounded. Replaying every item would duplicate old work;
 		// advance safely and wait for the next poll.
+		// patched by pi: cursors of the form "<number>:<ISO updated_at>" (discussion)
+		// legitimately change when the object is updated (new comment bumps
+		// updated_at), so the old cursor never appears on the page again. Compare
+		// timestamps instead of silently skipping — that was why discussion fires
+		// never happened (cursor advanced past every update without firing).
+		const oldTs = cursor.split(":").slice(1).join(":");
+		if (oldTs) {
+			const newer = events.filter((ev) => {
+				const eid = ev.id ?? "";
+				const num = eid.split(":")[0];
+				const eTs = eid.split(":").slice(1).join(":");
+				return num && eTs && eTs > oldTs; // ISO strings compare chronologically
+			});
+			if (newer.length > 0) {
+				return { nextCursor, fresh: newer, cursorMissing: false };
+			}
+		}
 		return { nextCursor, fresh: [], cursorMissing: true };
 	}
 	return { nextCursor, fresh: events.slice(0, cursorIndex), cursorMissing: false };
