@@ -11,6 +11,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ghLogger } from "./log.ts";
 import { armRoutine, stopRoutine } from "./poller.ts";
 import { saveStore } from "./store.ts";
+import { getDb } from "./db.ts";
 import { MIN_GITHUB_POLL_MS, type Routine, type RoutineRuntime } from "./types.ts";
 
 const IdOrName = Type.Object({
@@ -324,6 +325,58 @@ export function registerTools(pi: ExtensionAPI, runtime: RoutineRuntime): void {
 			routine.paused = false;
 			await saveStore(runtime.store);
 			return { details: {}, content: [{ type: "text", text: `Resumed '${routine.name}'.` }] };
+		},
+	});
+
+	pi.registerTool({
+		name: "RoutineMessages",
+		label: "Routine: Messages",
+		description:
+			"Query the local SQLite GH message store (read-only). Optional SELECT/WITH query; defaults to the 20 most recent messages. Write statements are rejected.",
+		parameters: Type.Object({
+			query: Type.Optional(
+				Type.String({
+					description:
+						"Optional SELECT SQL against the messages table. Must start with SELECT or WITH. Write statements and multi-statement strings are rejected.",
+				}),
+			),
+		}),
+		async execute(_toolCallId: string, params: { query?: string }) {
+			const db = getDb();
+			if (!db)
+				return {
+					details: { error: "sqlite unavailable" },
+					content: [{ type: "text", text: "SQLite message store unavailable." }],
+				};
+			const q = (params.query ?? "").trim();
+			if (q && !/^\s*(SELECT|WITH)\b/i.test(q)) {
+				return {
+					details: { rejected: q },
+					content: [{ type: "text", text: "Read-only tool: only SELECT/WITH queries are allowed." }],
+				};
+			}
+			if (q && q.includes(";")) {
+				return {
+					details: { rejected: q },
+					content: [{ type: "text", text: "Multi-statement queries are not allowed." }],
+				};
+			}
+			const sql =
+				q ||
+				"SELECT id, routine, event, author, body, gh_time, seen_at FROM messages ORDER BY gh_time DESC LIMIT 20";
+			try {
+				const rows = db.prepare(sql).all();
+				const text =
+					rows.length === 0
+						? "No messages in store."
+						: JSON.stringify(rows, null, 2);
+				return { details: { rows: rows.length }, content: [{ type: "text", text }] };
+			} catch (err) {
+				return {
+					details: { error: String(err) },
+					content: [{ type: "text", text: "Query failed: " + String(err) }],
+				};
+			}
 		},
 	});
 }
