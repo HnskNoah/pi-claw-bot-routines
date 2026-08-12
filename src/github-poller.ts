@@ -28,9 +28,9 @@ import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { enqueueFireRequest } from "./scheduler.ts";
+import { buildPrompt } from "./executor.ts";
 import { saveStore } from "./store.ts";
-import type { GithubTrigger, Routine, RoutineRuntimeState } from "./types.ts";
+import type { GithubTrigger, Routine, RoutineRuntimeState, RoutineTickState } from "./types.ts";
 import { ghLogger } from "./pi-log.ts";
 import { MAX_GITHUB_BACKOFF_MS, MIN_GITHUB_POLL_MS } from "./types.ts";
 
@@ -615,11 +615,28 @@ export async function tickGithub(
 		.map(({ event }) => event);
 	for (const ev of chronological) {
 		try {
-			enqueueFireRequest(live, triggerIndex, runtime, pi, getCtx, { githubEvent: ev.payload });
+			// patched by pi: reuse pi's own message queue instead of the routine
+			// fire queue. pi.sendUserMessage({deliverAs:"followUp"}) appends to the
+			// unbounded `_followUpMessages` FIFO, so consecutive GitHub messages are
+			// processed one turn at a time like TUI messages — no loss (the routine
+			// queue drops the oldest at depth 3), natural ordering, pi manages the
+			// context. The routine-side bookkeeping (ticks, daily caps) isn't used by
+			// polling: the pino fire line covers observability and the {state}
+			// summary is refreshed by the injected turn itself.
+			const tickState: RoutineTickState =
+				runtime.store.tickState[routine.id] ?? ({} as RoutineTickState);
+			let cwd: string;
+			try {
+				cwd = getCtx()?.cwd ?? process.cwd();
+			} catch {
+				cwd = process.cwd();
+			}
+			const prompt = buildPrompt(live, tickState, cwd, null, ev.payload, null);
+			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			ghLogger.info({ routine: live.name, event: trig.event }, "fire");
 		} catch (err) {
-			console.error(`[pi-routines] github enqueue failed for '${routine.name}':`, err);
-			ghLogger.error({ routine: routine.name }, "enqueue failed");
-			ghLogger.error({ err: String(err) }, "enqueue error");
+			console.error(`[pi-routines] github inject failed for '${routine.name}':`, err);
+			ghLogger.error({ routine: live.name, err: String(err) }, "fire inject failed");
 		}
 	}
 	// patched by pi: one structured log line per poll cycle (user: mature logging)
