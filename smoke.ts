@@ -7,7 +7,13 @@
  * type-only,type stripping 后不残留,故可脱离 pi 独立跑。
  */
 import assert from "node:assert/strict";
-import { endpointFor, eventsAfterCursor, nextIdleDelay, normaliseEvents } from "./src/poller.ts";
+import {
+	endpointFor,
+	eventsAfterCursor,
+	isBotAuthored,
+	nextIdleDelay,
+	normaliseEvents,
+} from "./src/poller.ts";
 import type { GithubTrigger } from "./src/types.ts";
 
 const trig = (event: string, repo = "HnskNoah/pi-claw"): GithubTrigger => ({
@@ -98,4 +104,18 @@ assert.deepEqual(nextIdleDelay(0, 2, base), { delay: 60_000, level: 2 }, "封顶
 assert.deepEqual(nextIdleDelay(1, 2, base), { delay: 10_000, level: 0 }, "有 fresh → 立即回 10s");
 assert.deepEqual(nextIdleDelay(0, 0, 120_000), { delay: 360_000, level: 1 }, "watch(120s) → 360s");
 
-console.log("✓ smoke 全过:endpoint / [bot] 过滤 / discussion 时间戳回退 / seed / 页滚 / 消息化 / 频率退化");
+// 7. discussion 自触发剔除: 评论尾部作者是 [bot] → 该事件丢弃
+assert.equal(isBotAuthored([]), false, "空列表非 bot");
+assert.equal(
+	isBotAuthored([{ user: { login: "HnskNoah" } }, { user: { login: "hanenoah-bot[bot]" } }]),
+	true,
+	"尾部是 bot → 自触发",
+);
+assert.equal(
+	isBotAuthored([{ user: { login: "hanenoah-bot[bot]" } }, { user: { login: "HnskNoah" } }]),
+	false,
+	"尾部是用户 → 保留",
+);
+assert.equal(isBotAuthored([{ user: {} }]), false, "无 login → 保留");
+
+console.log("✓ smoke 全过:endpoint / [bot] 过滤 / discussion 时间戳回退 / seed / 页滚 / 消息化 / 频率退化 / 自触发剔除");

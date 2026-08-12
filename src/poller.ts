@@ -106,6 +106,45 @@ function runGhProcess(args: string[]): Promise<GhResult> {
 // ─── installation token 401 刷新 ─────────────────────────────────────────────
 
 /** 频率退化档位: 空闲时 10s → 30s → 60s(相对各自 base interval 的倍数)。 */
+export function isBotAuthored(comments: Array<{ user?: { login?: string } }>): boolean {
+	const last = comments.length > 0 ? comments[comments.length - 1] : undefined;
+	return typeof last?.user?.login === "string" && last.user.login.endsWith("[bot]");
+}
+
+/**
+ * discussion 自触发剔除(数据层): 候选事件逐个查该讨论的最新评论,
+ * 尾部作者是 [bot](我们自己回复 bump 了 updated_at) → 丢弃事件, 游标照常推进。
+ * 空闲时零额外查询(只对有 fresh 的讨论查); 查询失败保守保留(轮次规则 2 兜底)。
+ */
+async function pruneBotDiscussionEvents(
+	trig: GithubTrigger,
+	fresh: NormalisedEvent[],
+): Promise<NormalisedEvent[]> {
+	const kept: NormalisedEvent[] = [];
+	for (const ev of fresh) {
+		const n = ev.payload.number;
+		if (typeof n !== "number") {
+			kept.push(ev);
+			continue;
+		}
+		try {
+			const res = await runGhProcess(["api", `repos/${trig.repo}/discussions/${n}/comments?per_page=30`]);
+			if (!res.ok || !Array.isArray(res.json)) {
+				kept.push(ev);
+				continue;
+			}
+			if (isBotAuthored(res.json as Array<{ user?: { login?: string } }>)) {
+				ghLogger.info({ event: trig.event, discussion: n }, "discussion self-reply pruned");
+				continue;
+			}
+			kept.push(ev);
+		} catch {
+			kept.push(ev);
+		}
+	}
+	return kept;
+}
+
 const IDLE_TIERS = [1, 3, 6];
 
 /**
@@ -523,7 +562,12 @@ async function tick(
 	}
 
 	// 按时间正序注入(多事件时从旧到新,一消息一轮)
-	const chronological = fresh
+	// 数据层剔除 discussion 自触发: bot 自己的回复不注入(游标仍推进)
+	const userEvents =
+		trig.event === "discussion.comment" && fresh.length > 0
+			? await pruneBotDiscussionEvents(trig, fresh)
+			: fresh;
+	const chronological = userEvents
 		.map((event, index) => ({ event, index }))
 		.sort((a, b) => {
 			const aTime = eventTime(a.event);
@@ -558,7 +602,7 @@ async function tick(
 	// 频率退化: 全部成功时, 有 fresh(活跃)→ 回 base 档; 连续空转 → 升档(10s→30s→60s)。
 	// 失败路径保留 backoff(2× cap 60s), 不与档位互相干扰。
 	if (failures.length === 0) {
-		const stepped = nextIdleDelay(fresh.length, tstate.idleLevel, interval);
+		const stepped = nextIdleDelay(userEvents.length, tstate.idleLevel, interval);
 		tstate.idleLevel = stepped.level;
 		nextDelay = stepped.delay;
 	}
